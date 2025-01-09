@@ -1,4 +1,6 @@
-import init, { apply_grayscale } from '../../pkg/image_processor.js';
+import init, { apply_grayscale } from '../pkg/image_processor.js';
+
+
 
 let originalCanvas, processedCanvas;
 let originalCtx, processedCtx;
