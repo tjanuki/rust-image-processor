@@ -1,23 +1,26 @@
-import init, { apply_grayscale } from '../pkg/image_processor.js';
+import init, { apply_grayscale, merge_half_images } from '../pkg/image_processor.js';
 
-
-
-let originalCanvas, processedCanvas;
-let originalCtx, processedCtx;
+let originalCanvas1, originalCanvas2, mergedCanvas;
+let originalCtx1, originalCtx2, mergedCtx;
+let images = { first: null, second: null };
 
 async function initialize() {
     await init();
 
-    originalCanvas = document.getElementById('originalCanvas');
-    processedCanvas = document.getElementById('processedCanvas');
-    originalCtx = originalCanvas.getContext('2d');
-    processedCtx = processedCanvas.getContext('2d');
+    originalCanvas1 = document.getElementById('originalCanvas1');
+    originalCanvas2 = document.getElementById('originalCanvas2');
+    mergedCanvas = document.getElementById('mergedCanvas');
 
-    document.getElementById('imageInput').addEventListener('change', loadImage);
-    document.getElementById('processButton').addEventListener('click', processImage);
+    originalCtx1 = originalCanvas1.getContext('2d');
+    originalCtx2 = originalCanvas2.getContext('2d');
+    mergedCtx = mergedCanvas.getContext('2d');
+
+    document.getElementById('imageInput1').addEventListener('change', (e) => loadImage(e, 'first'));
+    document.getElementById('imageInput2').addEventListener('change', (e) => loadImage(e, 'second'));
+    document.getElementById('mergeButton').addEventListener('click', mergeImages);
 }
 
-async function loadImage(event) {
+async function loadImage(event, which) {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -25,33 +28,51 @@ async function loadImage(event) {
     img.src = URL.createObjectURL(file);
 
     img.onload = () => {
+        const canvas = which === 'first' ? originalCanvas1 : originalCanvas2;
+        const ctx = which === 'first' ? originalCtx1 : originalCtx2;
+
+        // Store image dimensions
+        images[which] = { width: img.width, height: img.height };
+
         // Set canvas sizes
-        originalCanvas.width = img.width;
-        originalCanvas.height = img.height;
-        processedCanvas.width = img.width;
-        processedCanvas.height = img.height;
+        canvas.width = img.width;
+        canvas.height = img.height;
+        mergedCanvas.width = img.width;
+        mergedCanvas.height = img.height;
 
         // Draw original image
-        originalCtx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0);
     };
 }
 
-function processImage() {
-    const imageData = originalCtx.getImageData(
+function mergeImages() {
+    if (!images.first || !images.second) {
+        alert('Please load both images first');
+        return;
+    }
+
+    const imageData1 = originalCtx1.getImageData(
         0, 0,
-        originalCanvas.width,
-        originalCanvas.height
+        originalCanvas1.width,
+        originalCanvas1.height
+    );
+
+    const imageData2 = originalCtx2.getImageData(
+        0, 0,
+        originalCanvas2.width,
+        originalCanvas2.height
     );
 
     try {
-        apply_grayscale(
-            processedCtx,
-            originalCanvas.width,
-            originalCanvas.height,
-            new Uint8Array(imageData.data)
+        merge_half_images(
+            mergedCtx,
+            originalCanvas1.width,
+            originalCanvas1.height,
+            new Uint8Array(imageData1.data),
+            new Uint8Array(imageData2.data)
         );
     } catch (error) {
-        console.error('Error processing image:', error);
+        console.error('Error merging images:', error);
     }
 }
 

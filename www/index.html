@@ -8,25 +8,43 @@
             display: flex;
             gap: 20px;
             margin: 20px;
+            flex-wrap: wrap;
         }
         canvas {
             border: 1px solid #ccc;
+            max-width: 400px;
+            height: auto;
+        }
+        .controls {
+            width: 100%;
+            margin: 20px 0;
         }
     </style>
 </head>
 <body>
 <div class="container">
     <div>
-        <h3>Original Image</h3>
-        <canvas width="200" id="originalCanvas"></canvas>
+        <h3>First Image</h3>
+        <canvas id="originalCanvas1"></canvas>
+        <div class="controls">
+            <input type="file" id="imageInput1" accept="image/*">
+        </div>
     </div>
     <div>
-        <h3>Processed Image</h3>
-        <canvas width="200" id="processedCanvas"></canvas>
+        <h3>Second Image</h3>
+        <canvas id="originalCanvas2"></canvas>
+        <div class="controls">
+            <input type="file" id="imageInput2" accept="image/*">
+        </div>
+    </div>
+    <div>
+        <h3>Merged Result</h3>
+        <canvas id="mergedCanvas"></canvas>
+        <div class="controls">
+            <button id="mergeButton">Merge Images</button>
+        </div>
     </div>
 </div>
-<input type="file" id="imageInput" accept="image/*">
-<button id="processButton">Apply Grayscale</button>
 <script type="module" src="./src/index.js"></script>
 </body>
 </html>
