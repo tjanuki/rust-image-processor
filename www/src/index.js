@@ -18,6 +18,14 @@ async function initialize() {
     originalCtx2 = originalCanvas2.getContext('2d');
     mergedCtx = mergedCanvas.getContext('2d');
 
+    // Add initial canvas sizes
+    originalCanvas1.width = 400;
+    originalCanvas1.height = 400;
+    originalCanvas2.width = 400;
+    originalCanvas2.height = 400;
+    mergedCanvas.width = 400;
+    mergedCanvas.height = 400;
+
     // Setup event listeners for dragging
     setupDragHandlers('first', originalCanvas1);
     setupDragHandlers('second', originalCanvas2);
@@ -78,6 +86,25 @@ function redrawImage(which) {
 
     // Draw zoomed image with offset
     ctx.drawImage(imageData.img, x, y, zoomedWidth, zoomedHeight);
+
+    // Add shading overlay for unused portion
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; // Semi-transparent black
+
+    if (which === 'first') {
+        // Shade right half for first image
+        ctx.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+    } else {
+        // Shade left half for second image
+        ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+    }
+
+    // Add a vertical line to show the split
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(canvas.width / 2, 0);
+    ctx.lineTo(canvas.width / 2, canvas.height);
+    ctx.stroke();
 }
 
 function adjustZoom(which, delta) {
@@ -167,7 +194,6 @@ function setupDragHandlers(which, canvas) {
     });
 }
 
-// Reset offsets when loading new image
 function resetImagePosition(which) {
     images[which].offsetX = 0;
     images[which].offsetY = 0;
@@ -175,17 +201,10 @@ function resetImagePosition(which) {
 }
 
 function downloadMergedImage() {
-    // Create a temporary link element
     const link = document.createElement('a');
-
-    // Get the merged canvas data as a data URL
     const imageData = mergedCanvas.toDataURL('image/png');
-
-    // Set the download attributes
     link.href = imageData;
     link.download = 'merged-image.png';
-
-    // Append to body, click, and remove
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
