@@ -41,6 +41,44 @@ pub fn apply_grayscale(
 }
 
 #[wasm_bindgen]
+pub fn compress_image(
+    ctx: &CanvasRenderingContext2d,
+    width: u32,
+    height: u32,
+    image_data: Vec<u8>,
+    quality: f32
+) -> Result<(), JsValue> {
+    // Convert raw image data into Image buffer
+    let img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, image_data)
+        .expect("Failed to create image buffer");
+
+    // Create a new buffer for the compressed image
+    let mut compressed: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::new(width, height);
+
+    // Apply basic compression by reducing color depth
+    for (x, y, pixel) in img.enumerate_pixels() {
+        let factor = quality.max(0.1); // Ensure factor is at least 0.1
+        let new_r = ((pixel[0] as f32 * factor).round() / factor) as u8;
+        let new_g = ((pixel[1] as f32 * factor).round() / factor) as u8;
+        let new_b = ((pixel[2] as f32 * factor).round() / factor) as u8;
+
+        compressed.put_pixel(x, y, Rgba([new_r, new_g, new_b, pixel[3]]));
+    }
+
+    // Convert back to ImageData for canvas
+    let compressed_data = ImageData::new_with_u8_clamped_array_and_sh(
+        wasm_bindgen::Clamped(&compressed.into_raw()),
+        width,
+        height
+    )?;
+
+    // Put the compressed image onto the canvas
+    ctx.put_image_data(&compressed_data, 0.0, 0.0)?;
+
+    Ok(())
+}
+
+#[wasm_bindgen]
 pub fn merge_half_images(
     ctx: &CanvasRenderingContext2d,
     width: u32,

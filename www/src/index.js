@@ -1,4 +1,4 @@
-import init, { apply_grayscale, merge_half_images } from '../pkg/image_processor.js';
+import init, { apply_grayscale, merge_half_images, compress_image } from '../pkg/image_processor.js';
 
 let originalCanvas1, originalCanvas2, mergedCanvas;
 let originalCtx1, originalCtx2, mergedCtx;
@@ -200,14 +200,37 @@ function resetImagePosition(which) {
     images[which].isDragging = false;
 }
 
-function downloadMergedImage() {
-    const link = document.createElement('a');
-    const imageData = mergedCanvas.toDataURL('image/png');
-    link.href = imageData;
-    link.download = 'merged-image.png';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+async function downloadMergedImage() {
+    const quality = parseInt(document.getElementById('compressionQuality').value) / 100;
+    const imageData = mergedCtx.getImageData(0, 0, mergedCanvas.width, mergedCanvas.height);
+
+    try {
+        // Apply Rust-based compression
+        await compress_image(
+            mergedCtx,
+            mergedCanvas.width,
+            mergedCanvas.height,
+            new Uint8Array(imageData.data),
+            quality
+        );
+
+        // Get the compressed image and download
+        const format = quality < 1 ? 'image/jpeg' : 'image/png';
+        const extension = quality < 1 ? 'jpg' : 'png';
+        const compressedData = mergedCanvas.toDataURL(format, quality);
+
+        const link = document.createElement('a');
+        link.href = compressedData;
+        link.download = `merged-image.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Restore the original merged image
+        mergedCtx.putImageData(imageData, 0, 0);
+    } catch (error) {
+        console.error('Error compressing image:', error);
+    }
 }
 
 initialize();
