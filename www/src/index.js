@@ -1,223 +1,233 @@
-import init, { apply_grayscale, merge_half_images, compress_image } from '../pkg/image_processor.js';
+import init, { merge_half_images, compress_image } from '../pkg/image_processor.js';
 
-let originalCanvas1, originalCanvas2, mergedCanvas;
-let originalCtx1, originalCtx2, mergedCtx;
-let images = {
-    first: { img: null, zoom: 1.0, width: 0, height: 0, offsetX: 0, offsetY: 0, isDragging: false },
-    second: { img: null, zoom: 1.0, width: 0, height: 0, offsetX: 0, offsetY: 0, isDragging: false }
-};
+let mainCanvas, mainCtx;
+let loadedImages = [];
+let activeImageIndex = -1;
+
+class ImageItem {
+    constructor(file, img) {
+        this.file = file;
+        this.img = img;
+        this.zoom = 1.0;
+        this.offsetX = 0;
+        this.offsetY = 0;
+        this.isDragging = false;
+    }
+}
 
 async function initialize() {
     await init();
 
-    originalCanvas1 = document.getElementById('originalCanvas1');
-    originalCanvas2 = document.getElementById('originalCanvas2');
-    mergedCanvas = document.getElementById('mergedCanvas');
+    mainCanvas = document.getElementById('mainCanvas');
+    mainCtx = mainCanvas.getContext('2d');
 
-    originalCtx1 = originalCanvas1.getContext('2d');
-    originalCtx2 = originalCanvas2.getContext('2d');
-    mergedCtx = mergedCanvas.getContext('2d');
+    // Set initial canvas size
+    mainCanvas.width = 400;
+    mainCanvas.height = 400;
 
-    // Add initial canvas sizes
-    originalCanvas1.width = 400;
-    originalCanvas1.height = 400;
-    originalCanvas2.width = 400;
-    originalCanvas2.height = 400;
-    mergedCanvas.width = 400;
-    mergedCanvas.height = 400;
-
-    // Setup event listeners for dragging
-    setupDragHandlers('first', originalCanvas1);
-    setupDragHandlers('second', originalCanvas2);
-
-    document.getElementById('imageInput1').addEventListener('change', (e) => loadImage(e, 'first'));
-    document.getElementById('imageInput2').addEventListener('change', (e) => loadImage(e, 'second'));
+    // Setup event listeners
+    document.getElementById('imageInput').addEventListener('change', handleFileSelect);
     document.getElementById('mergeButton').addEventListener('click', mergeImages);
     document.getElementById('downloadButton').addEventListener('click', downloadMergedImage);
-
-    // Initialize zoom controls
-    window.adjustZoom = adjustZoom;
-    window.updateZoom = updateZoom;
+    document.getElementById('zoomInBtn').addEventListener('click', () => adjustZoom(0.1));
+    document.getElementById('zoomOutBtn').addEventListener('click', () => adjustZoom(-0.1));
+    document.getElementById('zoomRange').addEventListener('input', (e) => updateZoom(parseFloat(e.target.value)));
+    setupDragHandlers();
 }
 
-async function loadImage(event, which) {
-    const file = event.target.files[0];
-    if (!file) return;
+function handleFileSelect(event) {
+    const files = event.target.files;
+    if (!files.length) return;
 
-    const img = new Image();
-    img.src = URL.createObjectURL(file);
+    // Clear previous images if any
+    loadedImages = [];
+    activeImageIndex = -1;
+    updateImageList();
+    updateZoomControls();
 
-    img.onload = () => {
-        // Store the image object and its original dimensions
-        images[which].img = img;
-        images[which].width = img.width;
-        images[which].height = img.height;
+    // Load each selected image
+    Array.from(files).forEach((file, index) => {
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
 
-        // Reset zoom when loading new image
-        images[which].zoom = 1.0;
-        document.getElementById(`zoomRange${which === 'first' ? '1' : '2'}`).value = 1;
-        document.getElementById(`zoomValue${which === 'first' ? '1' : '2'}`).textContent = '100%';
-
-        redrawImage(which);
-    };
+        img.onload = () => {
+            loadedImages.push(new ImageItem(file, img));
+            if (index === 0) {
+                activeImageIndex = 0;
+            }
+            updateImageList();
+            redrawCanvas();
+        };
+    });
 }
 
-function redrawImage(which) {
-    const canvas = which === 'first' ? originalCanvas1 : originalCanvas2;
-    const ctx = which === 'first' ? originalCtx1 : originalCtx2;
-    const imageData = images[which];
+function updateImageList() {
+    const imageList = document.getElementById('imageList');
+    imageList.innerHTML = '';
 
-    if (!imageData.img) return;
+    loadedImages.forEach((item, index) => {
+        const div = document.createElement('div');
+        div.className = `image-item ${index === activeImageIndex ? 'active' : ''}`;
+        div.textContent = `Image ${index + 1}: ${item.file.name}`;
+        div.onclick = () => {
+            activeImageIndex = index;
+            updateImageList();
+            updateZoomControls();
+            redrawCanvas();
+        };
+        imageList.appendChild(div);
+    });
+}
 
-    // Calculate zoomed dimensions
-    const zoomedWidth = imageData.width * imageData.zoom;
-    const zoomedHeight = imageData.height * imageData.zoom;
+function updateZoomControls() {
+    const zoomRange = document.getElementById('zoomRange');
+    const zoomValue = document.getElementById('zoomValue');
+    const zoomControls = document.querySelector('.zoom-controls');
 
-    // Set canvas size to container size
-    canvas.width = 400;  // Match container width
-    canvas.height = 400; // Match container height
-
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Calculate position to center the image
-    const x = (canvas.width - zoomedWidth) / 2 + imageData.offsetX;
-    const y = (canvas.height - zoomedHeight) / 2 + imageData.offsetY;
-
-    // Draw zoomed image with offset
-    ctx.drawImage(imageData.img, x, y, zoomedWidth, zoomedHeight);
-
-    // Add shading overlay for unused portion
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; // Semi-transparent black
-
-    if (which === 'first') {
-        // Shade right half for first image
-        ctx.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+    if (activeImageIndex !== -1) {
+        const currentZoom = loadedImages[activeImageIndex].zoom;
+        zoomRange.value = currentZoom;
+        zoomValue.textContent = `${Math.round(currentZoom * 100)}%`;
+        zoomControls.style.opacity = '1';
+        zoomControls.style.pointerEvents = 'auto';
     } else {
-        // Shade left half for second image
-        ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+        zoomRange.value = 1;
+        zoomValue.textContent = '100%';
+        zoomControls.style.opacity = '0.5';
+        zoomControls.style.pointerEvents = 'none';
     }
-
-    // Add a vertical line to show the split
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(canvas.width / 2, 0);
-    ctx.lineTo(canvas.width / 2, canvas.height);
-    ctx.stroke();
 }
 
-function adjustZoom(which, delta) {
-    const rangeInput = document.getElementById(`zoomRange${which === 'first' ? '1' : '2'}`);
-    const newZoom = Math.max(0.1, Math.min(3.0, parseFloat(rangeInput.value) + delta));
-    updateZoom(which, newZoom);
-    rangeInput.value = newZoom;
+function adjustZoom(delta) {
+    if (activeImageIndex === -1) return;
+
+    const zoomRange = document.getElementById('zoomRange');
+    const currentZoom = parseFloat(zoomRange.value);
+    const newZoom = Math.max(0.1, Math.min(3.0, currentZoom + delta));
+    updateZoom(newZoom);
+    zoomRange.value = newZoom;
 }
 
-function updateZoom(which, value) {
+function updateZoom(value) {
+    if (activeImageIndex === -1) return;
+
     const zoom = parseFloat(value);
-    images[which].zoom = zoom;
-    document.getElementById(`zoomValue${which === 'first' ? '1' : '2'}`).textContent = `${Math.round(zoom * 100)}%`;
-    redrawImage(which);
+    loadedImages[activeImageIndex].zoom = zoom;
+    document.getElementById('zoomValue').textContent = `${Math.round(zoom * 100)}%`;
+    redrawCanvas();
 }
 
-function mergeImages() {
-    if (!images.first.img || !images.second.img) {
-        alert('Please load both images first');
-        return;
-    }
+function redrawCanvas() {
+    mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
 
-    // Set merged canvas dimensions
-    const width = 400;  // Match container width
-    const height = 400; // Match container height
-    mergedCanvas.width = width;
-    mergedCanvas.height = height;
+    loadedImages.forEach((imageItem, index) => {
+        const zoomedWidth = imageItem.img.width * imageItem.zoom;
+        const zoomedHeight = imageItem.img.height * imageItem.zoom;
 
-    // Get the current view of each canvas (what's visible in the viewport)
-    const imageData1 = originalCtx1.getImageData(0, 0, width, height);
-    const imageData2 = originalCtx2.getImageData(0, 0, width, height);
+        // Calculate centered position
+        const x = (mainCanvas.width - zoomedWidth) / 2 + imageItem.offsetX;
+        const y = (mainCanvas.height - zoomedHeight) / 2 + imageItem.offsetY;
 
-    try {
-        merge_half_images(
-            mergedCtx,
-            width,
-            height,
-            new Uint8Array(imageData1.data),
-            new Uint8Array(imageData2.data)
-        );
-    } catch (error) {
-        console.error('Error merging images:', error);
-    }
+        // Draw image
+        mainCtx.drawImage(imageItem.img, x, y, zoomedWidth, zoomedHeight);
 
-    // Enable download button after successful merge
-    document.getElementById('downloadButton').disabled = false;
+        // Highlight active image with a border
+        if (index === activeImageIndex) {
+            mainCtx.strokeStyle = '#00ff00';
+            mainCtx.lineWidth = 2;
+            mainCtx.strokeRect(x, y, zoomedWidth, zoomedHeight);
+        }
+    });
 }
 
-function setupDragHandlers(which, canvas) {
+function setupDragHandlers() {
     let lastX = 0;
     let lastY = 0;
 
-    canvas.addEventListener('mousedown', (e) => {
-        const imageData = images[which];
-        imageData.isDragging = true;
-        const rect = canvas.getBoundingClientRect();
+    mainCanvas.addEventListener('mousedown', (e) => {
+        if (activeImageIndex === -1) return;
+
+        const rect = mainCanvas.getBoundingClientRect();
         lastX = e.clientX - rect.left;
         lastY = e.clientY - rect.top;
+        loadedImages[activeImageIndex].isDragging = true;
     });
 
-    canvas.addEventListener('mousemove', (e) => {
-        const imageData = images[which];
-        if (!imageData.isDragging) return;
+    mainCanvas.addEventListener('mousemove', (e) => {
+        if (activeImageIndex === -1 || !loadedImages[activeImageIndex].isDragging) return;
 
-        const rect = canvas.getBoundingClientRect();
+        const rect = mainCanvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
         const deltaX = x - lastX;
         const deltaY = y - lastY;
 
-        imageData.offsetX += deltaX;
-        imageData.offsetY += deltaY;
+        loadedImages[activeImageIndex].offsetX += deltaX;
+        loadedImages[activeImageIndex].offsetY += deltaY;
 
         lastX = x;
         lastY = y;
-
-        redrawImage(which);
+        redrawCanvas();
     });
 
-    canvas.addEventListener('mouseup', () => {
-        images[which].isDragging = false;
+    mainCanvas.addEventListener('mouseup', () => {
+        if (activeImageIndex !== -1) {
+            loadedImages[activeImageIndex].isDragging = false;
+        }
     });
 
-    canvas.addEventListener('mouseleave', () => {
-        images[which].isDragging = false;
+    mainCanvas.addEventListener('mouseleave', () => {
+        if (activeImageIndex !== -1) {
+            loadedImages[activeImageIndex].isDragging = false;
+        }
     });
 }
 
-function resetImagePosition(which) {
-    images[which].offsetX = 0;
-    images[which].offsetY = 0;
-    images[which].isDragging = false;
+function mergeImages() {
+    if (loadedImages.length < 2) {
+        alert('Please load at least two images');
+        return;
+    }
+
+    // Get the current canvas state
+    const imageData = mainCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height);
+
+    try {
+        // Use existing merge function
+        merge_half_images(
+            mainCtx,
+            mainCanvas.width,
+            mainCanvas.height,
+            new Uint8Array(imageData.data),
+            new Uint8Array(imageData.data)
+        );
+
+        // Enable download button after successful merge
+        document.getElementById('downloadButton').disabled = false;
+    } catch (error) {
+        console.error('Error merging images:', error);
+    }
 }
 
 async function downloadMergedImage() {
     const quality = parseInt(document.getElementById('compressionQuality').value) / 100;
-    const imageData = mergedCtx.getImageData(0, 0, mergedCanvas.width, mergedCanvas.height);
+    const imageData = mainCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height);
 
     try {
-        // Apply Rust-based compression
+        // Apply compression
         await compress_image(
-            mergedCtx,
-            mergedCanvas.width,
-            mergedCanvas.height,
+            mainCtx,
+            mainCanvas.width,
+            mainCanvas.height,
             new Uint8Array(imageData.data),
             quality
         );
 
-        // Get the compressed image and download
+        // Download the compressed image
         const format = quality < 1 ? 'image/jpeg' : 'image/png';
         const extension = quality < 1 ? 'jpg' : 'png';
-        const compressedData = mergedCanvas.toDataURL(format, quality);
+        const compressedData = mainCanvas.toDataURL(format, quality);
 
         const link = document.createElement('a');
         link.href = compressedData;
@@ -227,7 +237,7 @@ async function downloadMergedImage() {
         document.body.removeChild(link);
 
         // Restore the original merged image
-        mergedCtx.putImageData(imageData, 0, 0);
+        mainCtx.putImageData(imageData, 0, 0);
     } catch (error) {
         console.error('Error compressing image:', error);
     }
