@@ -103,38 +103,56 @@ function setupMouseHandlers() {
     let originalWidth, originalHeight, originalX, originalY;
 
     mainCanvas.addEventListener('mousedown', (e) => {
-        if (activeImageIndex === -1) return;
-
         const rect = mainCanvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        const activeImage = loadedImages[activeImageIndex];
-        const handles = activeImage.getHandles();
+        // First check if we clicked on a handle of the active image
+        if (activeImageIndex !== -1) {
+            const activeImage = loadedImages[activeImageIndex];
+            const handles = activeImage.getHandles();
 
-        // Check if clicking on a resize handle
-        for (const [position, handle] of Object.entries(handles)) {
-            if (isPointInHandle(mouseX, mouseY, handle)) {
-                activeImage.isResizing = true;
-                resizeHandle = position;
-                startX = mouseX;
-                startY = mouseY;
-                originalWidth = activeImage.width;
-                originalHeight = activeImage.height;
-                originalX = activeImage.x;
-                originalY = activeImage.y;
+            for (const [position, handle] of Object.entries(handles)) {
+                if (isPointInHandle(mouseX, mouseY, handle)) {
+                    activeImage.isResizing = true;
+                    resizeHandle = position;
+                    startX = mouseX;
+                    startY = mouseY;
+                    originalWidth = activeImage.width;
+                    originalHeight = activeImage.height;
+                    originalX = activeImage.x;
+                    originalY = activeImage.y;
+                    return;
+                }
+            }
+        }
+
+        // Check all images in reverse order (top to bottom)
+        for (let i = loadedImages.length - 1; i >= 0; i--) {
+            const image = loadedImages[i];
+            if (isPointInImage(mouseX, mouseY, image)) {
+                // If clicking a different image, update selection
+                if (i !== activeImageIndex) {
+                    activeImageIndex = i;
+                    updateImageList();
+                }
+
+                // Set up dragging
+                image.isDragging = true;
+                startX = mouseX - image.x;
+                startY = mouseY - image.y;
+                redrawCanvas();
                 return;
             }
         }
 
-        // Check if clicking on the image
-        if (isPointInImage(mouseX, mouseY, activeImage)) {
-            activeImage.isDragging = true;
-            startX = mouseX - activeImage.x;
-            startY = mouseY - activeImage.y;
-        }
+        // If we clicked empty space, deselect
+        activeImageIndex = -1;
+        updateImageList();
+        redrawCanvas();
     });
 
+    // Keep existing mousemove handler
     mainCanvas.addEventListener('mousemove', (e) => {
         if (activeImageIndex === -1) return;
 
@@ -184,6 +202,7 @@ function setupMouseHandlers() {
         redrawCanvas();
     });
 
+    // Keep existing mouseup and mouseleave handlers
     mainCanvas.addEventListener('mouseup', () => {
         if (activeImageIndex !== -1) {
             loadedImages[activeImageIndex].isDragging = false;
