@@ -1,4 +1,4 @@
-import init, { merge_half_images, compress_image } from '../pkg/image_processor.js';
+import init, {compress_image, merge_half_images} from '../pkg/image_processor.js';
 
 let mainCanvas, mainCtx;
 let loadedImages = [];
@@ -30,10 +30,32 @@ class ImageItem {
         const bounds = this.getBounds();
         const handleSize = 8;
         return {
-            'nw': { x: bounds.left - handleSize/2, y: bounds.top - handleSize/2, cursor: 'nw-resize' },
-            'ne': { x: bounds.right - handleSize/2, y: bounds.top - handleSize/2, cursor: 'ne-resize' },
-            'se': { x: bounds.right - handleSize/2, y: bounds.bottom - handleSize/2, cursor: 'se-resize' },
-            'sw': { x: bounds.left - handleSize/2, y: bounds.bottom - handleSize/2, cursor: 'sw-resize' }
+            // Corner handles
+            'nw': {x: bounds.left - handleSize / 2, y: bounds.top - handleSize / 2, cursor: 'nw-resize'},
+            'ne': {x: bounds.right - handleSize / 2, y: bounds.top - handleSize / 2, cursor: 'ne-resize'},
+            'se': {x: bounds.right - handleSize / 2, y: bounds.bottom - handleSize / 2, cursor: 'se-resize'},
+            'sw': {x: bounds.left - handleSize / 2, y: bounds.bottom - handleSize / 2, cursor: 'sw-resize'},
+            // Edge handles
+            'n': {
+                x: bounds.left + (bounds.right - bounds.left) / 2 - handleSize / 2,
+                y: bounds.top - handleSize / 2,
+                cursor: 'n-resize'
+            },
+            's': {
+                x: bounds.left + (bounds.right - bounds.left) / 2 - handleSize / 2,
+                y: bounds.bottom - handleSize / 2,
+                cursor: 's-resize'
+            },
+            'w': {
+                x: bounds.left - handleSize / 2,
+                y: bounds.top + (bounds.bottom - bounds.top) / 2 - handleSize / 2,
+                cursor: 'w-resize'
+            },
+            'e': {
+                x: bounds.right - handleSize / 2,
+                y: bounds.top + (bounds.bottom - bounds.top) / 2 - handleSize / 2,
+                cursor: 'e-resize'
+            }
         };
     }
 }
@@ -169,29 +191,42 @@ function setupMouseHandlers() {
             const deltaX = mouseX - startX;
             const deltaY = mouseY - startY;
 
-            // Calculate new size while maintaining aspect ratio
-            const aspectRatio = activeImage.img.width / activeImage.img.height;
-
             switch (resizeHandle) {
+                // Corner handles
                 case 'se':
                     activeImage.width = Math.max(50, originalWidth + deltaX);
-                    activeImage.height = activeImage.width / aspectRatio;
+                    activeImage.height = Math.max(50, originalHeight + deltaY);
                     break;
                 case 'sw':
                     activeImage.width = Math.max(50, originalWidth - deltaX);
-                    activeImage.height = activeImage.width / aspectRatio;
+                    activeImage.height = Math.max(50, originalHeight + deltaY);
                     activeImage.x = originalX + (originalWidth - activeImage.width);
                     break;
                 case 'ne':
                     activeImage.width = Math.max(50, originalWidth + deltaX);
-                    activeImage.height = activeImage.width / aspectRatio;
+                    activeImage.height = Math.max(50, originalHeight - deltaY);
                     activeImage.y = originalY + (originalHeight - activeImage.height);
                     break;
                 case 'nw':
                     activeImage.width = Math.max(50, originalWidth - deltaX);
-                    activeImage.height = activeImage.width / aspectRatio;
+                    activeImage.height = Math.max(50, originalHeight - deltaY);
                     activeImage.x = originalX + (originalWidth - activeImage.width);
                     activeImage.y = originalY + (originalHeight - activeImage.height);
+                    break;
+                // Edge handles
+                case 'n':
+                    activeImage.height = Math.max(50, originalHeight - deltaY);
+                    activeImage.y = originalY + (originalHeight - activeImage.height);
+                    break;
+                case 's':
+                    activeImage.height = Math.max(50, originalHeight + deltaY);
+                    break;
+                case 'w':
+                    activeImage.width = Math.max(50, originalWidth - deltaX);
+                    activeImage.x = originalX + (originalWidth - activeImage.width);
+                    break;
+                case 'e':
+                    activeImage.width = Math.max(50, originalWidth + deltaX);
                     break;
             }
         } else if (activeImage.isDragging) {
@@ -222,8 +257,8 @@ function setupMouseHandlers() {
 
 function isPointInHandle(x, y, handle) {
     const handleSize = 8;
-    return x >= handle.x - handleSize/2 && x <= handle.x + handleSize/2 &&
-        y >= handle.y - handleSize/2 && y <= handle.y + handleSize/2;
+    return x >= handle.x - handleSize / 2 && x <= handle.x + handleSize / 2 &&
+        y >= handle.y - handleSize / 2 && y <= handle.y + handleSize / 2;
 }
 
 function isPointInImage(x, y, image) {
