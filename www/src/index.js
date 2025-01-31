@@ -83,6 +83,21 @@ async function initialize() {
     setupMouseHandlers();
 }
 
+function bringImageToFront(index) {
+    if (index < 0 || index >= loadedImages.length) return;
+
+    // Remove the image from its current position and add it to the end
+    const image = loadedImages.splice(index, 1)[0];
+    loadedImages.push(image);
+
+    // Update active index to point to the new position
+    activeImageIndex = loadedImages.length - 1;
+
+    // Update the display
+    updateImageList();
+    redrawCanvas();
+}
+
 function handleFileSelect(event) {
     const files = event.target.files;
     if (!files.length) return;
@@ -153,14 +168,13 @@ function setupMouseHandlers() {
         for (let i = loadedImages.length - 1; i >= 0; i--) {
             const image = loadedImages[i];
             if (isPointInImage(mouseX, mouseY, image)) {
-                // If clicking a different image, update selection
                 if (i !== activeImageIndex) {
-                    activeImageIndex = i;
-                    updateImageList();
+                    // Bring the clicked image to front
+                    bringImageToFront(i);
                 }
 
                 // Set up dragging
-                image.isDragging = true;
+                loadedImages[activeImageIndex].isDragging = true;
                 startX = mouseX - image.x;
                 startY = mouseY - image.y;
                 redrawCanvas();
@@ -174,7 +188,6 @@ function setupMouseHandlers() {
         redrawCanvas();
     });
 
-    // Keep existing mousemove handler
     mainCanvas.addEventListener('mousemove', (e) => {
         if (activeImageIndex === -1) return;
 
@@ -192,7 +205,6 @@ function setupMouseHandlers() {
             const deltaY = mouseY - startY;
 
             switch (resizeHandle) {
-                // Corner handles
                 case 'se':
                     activeImage.width = Math.max(50, originalWidth + deltaX);
                     activeImage.height = Math.max(50, originalHeight + deltaY);
@@ -213,7 +225,6 @@ function setupMouseHandlers() {
                     activeImage.x = originalX + (originalWidth - activeImage.width);
                     activeImage.y = originalY + (originalHeight - activeImage.height);
                     break;
-                // Edge handles
                 case 'n':
                     activeImage.height = Math.max(50, originalHeight - deltaY);
                     activeImage.y = originalY + (originalHeight - activeImage.height);
@@ -237,7 +248,6 @@ function setupMouseHandlers() {
         redrawCanvas();
     });
 
-    // Keep existing mouseup and mouseleave handlers
     mainCanvas.addEventListener('mouseup', () => {
         if (activeImageIndex !== -1) {
             loadedImages[activeImageIndex].isDragging = false;
@@ -296,9 +306,7 @@ function updateImageList() {
         div.className = `image-item ${index === activeImageIndex ? 'active' : ''}`;
         div.textContent = `Image ${index + 1}: ${item.file.name}`;
         div.onclick = () => {
-            activeImageIndex = index;
-            updateImageList();
-            redrawCanvas();
+            bringImageToFront(index);
         };
         imageList.appendChild(div);
     });
