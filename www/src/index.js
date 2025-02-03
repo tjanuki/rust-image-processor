@@ -69,7 +69,21 @@ async function initialize() {
     mainCanvas.width = 400;
     mainCanvas.height = 400;
 
-    document.getElementById('imageInput').addEventListener('change', handleFileSelect);
+    // Hide the original file input
+    const fileInput = document.getElementById('imageInput');
+    fileInput.style.display = 'none';
+
+    // Create Add Files button
+    const addFilesBtn = document.createElement('button');
+    addFilesBtn.id = 'addFilesBtn';
+    addFilesBtn.textContent = 'Add Files';
+    addFilesBtn.onclick = () => fileInput.click();
+
+    // Insert the new button before the existing file input
+    fileInput.parentNode.insertBefore(addFilesBtn, fileInput);
+
+    // Update event listeners
+    fileInput.addEventListener('change', handleFileSelect);
     document.getElementById('mergeButton').addEventListener('click', mergeImages);
     document.getElementById('downloadButton').addEventListener('click', downloadMergedImage);
 
@@ -81,6 +95,25 @@ async function initialize() {
     });
 
     setupMouseHandlers();
+
+    // Add the button styles
+    const style = document.createElement('style');
+    style.textContent = `
+        #addFilesBtn {
+            padding: 8px 16px;
+            margin-right: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #addFilesBtn:hover {
+            background-color: #45a049;
+        }
+    `;
+    document.head.appendChild(style);
 }
 
 function bringImageToFront(index) {
@@ -102,11 +135,8 @@ function handleFileSelect(event) {
     const files = event.target.files;
     if (!files.length) return;
 
-    loadedImages = [];
-    activeImageIndex = -1;
-    updateImageList();
-
-    Array.from(files).forEach((file, index) => {
+    // Instead of clearing existing images, we'll add to them
+    Array.from(files).forEach((file) => {
         const img = new Image();
         img.src = URL.createObjectURL(file);
 
@@ -121,18 +151,21 @@ function handleFileSelect(event) {
                 imageItem.height *= scale;
             }
 
-            // Center the image
-            imageItem.x = (mainCanvas.width - imageItem.width) / 2;
-            imageItem.y = (mainCanvas.height - imageItem.height) / 2;
+            // Center the image with slight offset from previous images
+            const offset = loadedImages.length * 20;
+            imageItem.x = (mainCanvas.width - imageItem.width) / 2 + offset;
+            imageItem.y = (mainCanvas.height - imageItem.height) / 2 + offset;
 
             loadedImages.push(imageItem);
-            if (index === 0) {
-                activeImageIndex = 0;
-            }
+            activeImageIndex = loadedImages.length - 1;
+
             updateImageList();
             redrawCanvas();
         };
     });
+
+    // Reset the file input so the same files can be selected again if needed
+    event.target.value = '';
 }
 
 function setupMouseHandlers() {
@@ -362,7 +395,6 @@ function mergeImages() {
         console.error('Error merging images:', error);
     }
 }
-
 async function downloadMergedImage() {
     const quality = parseInt(document.getElementById('compressionQuality').value) / 100;
     const imageData = mainCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height);
