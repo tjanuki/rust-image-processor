@@ -330,6 +330,26 @@ function updateCursor(x, y, image) {
     mainCanvas.style.cursor = cursor;
 }
 
+function removeImage(index) {
+    if (index < 0 || index >= loadedImages.length) return;
+
+    // Remove the image
+    loadedImages.splice(index, 1);
+
+    // Update active index
+    if (activeImageIndex === index) {
+        // If we removed the active image, select the last image or -1 if none left
+        activeImageIndex = loadedImages.length > 0 ? loadedImages.length - 1 : -1;
+    } else if (activeImageIndex > index) {
+        // If we removed an image before the active one, decrement the active index
+        activeImageIndex--;
+    }
+
+    // Update the display
+    updateImageList();
+    redrawCanvas();
+}
+
 function updateImageList() {
     const imageList = document.getElementById('imageList');
     imageList.innerHTML = '';
@@ -337,10 +357,37 @@ function updateImageList() {
     loadedImages.forEach((item, index) => {
         const div = document.createElement('div');
         div.className = `image-item ${index === activeImageIndex ? 'active' : ''}`;
-        div.textContent = `Image ${index + 1}: ${item.file.name}`;
+
+        // Create container for image name and remove button
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = `Image ${index + 1}: ${item.file.name}`;
+        nameSpan.style.flex = '1';
+        nameSpan.style.cursor = 'pointer';
+        nameSpan.onclick = (e) => {
+            e.stopPropagation();
+            bringImageToFront(index);
+        };
+
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = '×';
+        removeBtn.style.marginLeft = '8px';
+        removeBtn.style.padding = '2px 6px';
+        removeBtn.style.backgroundColor = '#ff4444';
+        removeBtn.style.color = 'white';
+        removeBtn.style.border = 'none';
+        removeBtn.style.borderRadius = '3px';
+        removeBtn.style.cursor = 'pointer';
+        removeBtn.onclick = (e) => {
+            e.stopPropagation();
+            removeImage(index);
+        };
+
+        div.appendChild(nameSpan);
+        div.appendChild(removeBtn);
         div.onclick = () => {
             bringImageToFront(index);
         };
+
         imageList.appendChild(div);
     });
 }
