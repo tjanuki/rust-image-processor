@@ -69,6 +69,9 @@ async function initialize() {
     mainCanvas.width = 400;
     mainCanvas.height = 400;
 
+    // Draw initial guides
+    drawGuides();
+
     // Hide the original file input
     const fileInput = document.getElementById('imageInput');
     fileInput.style.display = 'none';
@@ -392,9 +395,38 @@ function updateImageList() {
     });
 }
 
+function drawGuides() {
+    const centerX = mainCanvas.width / 2;
+    const centerY = mainCanvas.height / 2;
+
+    // Set guide style
+    mainCtx.setLineDash([5, 5]);
+    mainCtx.lineWidth = 1;
+    mainCtx.strokeStyle = 'rgba(102, 102, 102, 0.8)';
+
+    // Draw vertical guide
+    mainCtx.beginPath();
+    mainCtx.moveTo(centerX, 0);
+    mainCtx.lineTo(centerX, mainCanvas.height);
+    mainCtx.stroke();
+
+    // Draw horizontal guide
+    mainCtx.beginPath();
+    mainCtx.moveTo(0, centerY);
+    mainCtx.lineTo(mainCanvas.width, centerY);
+    mainCtx.stroke();
+
+    // Reset line style
+    mainCtx.setLineDash([]);
+}
+
 function redrawCanvas() {
     mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
 
+    // Draw guides first (will be underneath images)
+    drawGuides();
+
+    // Draw images
     loadedImages.forEach((imageItem, index) => {
         // Draw image
         mainCtx.drawImage(imageItem.img, imageItem.x, imageItem.y, imageItem.width, imageItem.height);
@@ -418,6 +450,9 @@ function redrawCanvas() {
             }
         }
     });
+
+    // Draw guides again on top
+    drawGuides();
 }
 
 function mergeImages() {
