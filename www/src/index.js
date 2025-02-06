@@ -90,13 +90,6 @@ async function initialize() {
     document.getElementById('mergeButton').addEventListener('click', mergeImages);
     document.getElementById('downloadButton').addEventListener('click', downloadMergedImage);
 
-    // Setup compression quality display
-    const qualityInput = document.getElementById('compressionQuality');
-    const qualityValue = document.getElementById('qualityValue');
-    qualityInput.addEventListener('input', () => {
-        qualityValue.textContent = `${qualityInput.value}%`;
-    });
-
     setupMouseHandlers();
 
     // Add the button styles
@@ -478,7 +471,7 @@ function mergeImages() {
     }
 }
 async function downloadMergedImage() {
-    const quality = parseInt(document.getElementById('compressionQuality').value) / 100;
+    const quality = 1;
     const imageData = mainCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height);
 
     try {
@@ -487,7 +480,7 @@ async function downloadMergedImage() {
             mainCanvas.width,
             mainCanvas.height,
             new Uint8Array(imageData.data),
-            quality
+            .85
         );
 
         const format = quality < 1 ? 'image/jpeg' : 'image/png';
