@@ -15,6 +15,9 @@ class ImageItem {
         this.y = 0;
         this.isDragging = false;
         this.isResizing = false;
+        this.isCropping = false;
+        this.cropStart = null;
+        this.cropEnd = null;
     }
 
     getBounds() {
@@ -58,6 +61,17 @@ class ImageItem {
             }
         };
     }
+
+    getCropRect() {
+        if (!this.cropStart || !this.cropEnd) return null;
+
+        return {
+            x: Math.min(this.cropStart.x, this.cropEnd.x),
+            y: Math.min(this.cropStart.y, this.cropEnd.y),
+            width: Math.abs(this.cropStart.x - this.cropEnd.x),
+            height: Math.abs(this.cropStart.y - this.cropEnd.y)
+        };
+    }
 }
 
 async function initialize() {
@@ -69,33 +83,28 @@ async function initialize() {
     mainCanvas.width = 400;
     mainCanvas.height = 400;
 
-    // Draw initial guides
     drawGuides();
 
-    // Hide the original file input
     const fileInput = document.getElementById('imageInput');
     fileInput.style.display = 'none';
 
-    // Create Add Files button
     const addFilesBtn = document.createElement('button');
     addFilesBtn.id = 'addFilesBtn';
     addFilesBtn.textContent = 'Add Files';
     addFilesBtn.onclick = () => fileInput.click();
 
-    // Insert the new button before the existing file input
     fileInput.parentNode.insertBefore(addFilesBtn, fileInput);
 
-    // Update event listeners
     fileInput.addEventListener('change', handleFileSelect);
     document.getElementById('mergeButton').addEventListener('click', mergeImages);
     document.getElementById('downloadButton').addEventListener('click', downloadMergedImage);
 
     setupMouseHandlers();
+    addCropButton();
 
-    // Add the button styles
     const style = document.createElement('style');
     style.textContent = `
-        #addFilesBtn {
+        #addFilesBtn, #cropButton, #applyCropButton {
             padding: 8px 16px;
             margin-right: 10px;
             background-color: #4CAF50;
@@ -105,24 +114,57 @@ async function initialize() {
             cursor: pointer;
         }
 
-        #addFilesBtn:hover {
+        #addFilesBtn:hover, #cropButton:hover, #applyCropButton:hover {
             background-color: #45a049;
         }
     `;
     document.head.appendChild(style);
 }
 
+function addCropButton() {
+    const controls = document.querySelector('.controls');
+    const cropBtn = document.createElement('button');
+    cropBtn.id = 'cropButton';
+    cropBtn.textContent = 'Toggle Crop Mode';
+    cropBtn.style.marginRight = '10px';
+    controls.insertBefore(cropBtn, document.getElementById('mergeButton'));
+
+    const applyCropBtn = document.createElement('button');
+    applyCropBtn.id = 'applyCropButton';
+    applyCropBtn.textContent = 'Apply Crop';
+    applyCropBtn.style.display = 'none';
+    controls.insertBefore(applyCropBtn, document.getElementById('mergeButton'));
+
+    cropBtn.onclick = toggleCropMode;
+    applyCropBtn.onclick = applyCrop;
+}
+
+function toggleCropMode() {
+    if (activeImageIndex === -1) {
+        alert('Please select an image to crop');
+        return;
+    }
+
+    const activeImage = loadedImages[activeImageIndex];
+    activeImage.isCropping = !activeImage.isCropping;
+    activeImage.cropStart = null;
+    activeImage.cropEnd = null;
+
+    document.getElementById('cropButton').textContent =
+        activeImage.isCropping ? 'Cancel Crop' : 'Toggle Crop Mode';
+    document.getElementById('applyCropButton').style.display =
+        activeImage.isCropping ? 'inline' : 'none';
+
+    redrawCanvas();
+}
+
 function bringImageToFront(index) {
     if (index < 0 || index >= loadedImages.length) return;
 
-    // Remove the image from its current position and add it to the end
     const image = loadedImages.splice(index, 1)[0];
     loadedImages.push(image);
-
-    // Update active index to point to the new position
     activeImageIndex = loadedImages.length - 1;
 
-    // Update the display
     updateImageList();
     redrawCanvas();
 }
@@ -131,7 +173,6 @@ function handleFileSelect(event) {
     const files = event.target.files;
     if (!files.length) return;
 
-    // Instead of clearing existing images, we'll add to them
     Array.from(files).forEach((file) => {
         const img = new Image();
         img.src = URL.createObjectURL(file);
@@ -139,7 +180,6 @@ function handleFileSelect(event) {
         img.onload = () => {
             const imageItem = new ImageItem(file, img);
 
-            // Scale image if it's too large
             const maxDimension = 400;
             if (imageItem.width > maxDimension || imageItem.height > maxDimension) {
                 const scale = maxDimension / Math.max(imageItem.width, imageItem.height);
@@ -147,7 +187,6 @@ function handleFileSelect(event) {
                 imageItem.height *= scale;
             }
 
-            // Center the image with slight offset from previous images
             const offset = loadedImages.length * 20;
             imageItem.x = (mainCanvas.width - imageItem.width) / 2 + offset;
             imageItem.y = (mainCanvas.height - imageItem.height) / 2 + offset;
@@ -160,7 +199,6 @@ function handleFileSelect(event) {
         };
     });
 
-    // Reset the file input so the same files can be selected again if needed
     event.target.value = '';
 }
 
@@ -173,7 +211,18 @@ function setupMouseHandlers() {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        // First check if we clicked on a handle of the active image
+        if (activeImageIndex !== -1 && loadedImages[activeImageIndex].isCropping) {
+            const activeImage = loadedImages[activeImageIndex];
+            if (isPointInImage(mouseX, mouseY, activeImage)) {
+                activeImage.cropStart = {
+                    x: mouseX - activeImage.x,
+                    y: mouseY - activeImage.y
+                };
+                activeImage.cropEnd = {...activeImage.cropStart};
+                return;
+            }
+        }
+
         if (activeImageIndex !== -1) {
             const activeImage = loadedImages[activeImageIndex];
             const handles = activeImage.getHandles();
@@ -193,16 +242,13 @@ function setupMouseHandlers() {
             }
         }
 
-        // Check all images in reverse order (top to bottom)
         for (let i = loadedImages.length - 1; i >= 0; i--) {
             const image = loadedImages[i];
             if (isPointInImage(mouseX, mouseY, image)) {
                 if (i !== activeImageIndex) {
-                    // Bring the clicked image to front
                     bringImageToFront(i);
                 }
 
-                // Set up dragging
                 loadedImages[activeImageIndex].isDragging = true;
                 startX = mouseX - image.x;
                 startY = mouseY - image.y;
@@ -211,7 +257,6 @@ function setupMouseHandlers() {
             }
         }
 
-        // If we clicked empty space, deselect
         activeImageIndex = -1;
         updateImageList();
         redrawCanvas();
@@ -226,7 +271,15 @@ function setupMouseHandlers() {
 
         const activeImage = loadedImages[activeImageIndex];
 
-        // Update cursor based on position
+        if (activeImage.isCropping && activeImage.cropStart) {
+            activeImage.cropEnd = {
+                x: mouseX - activeImage.x,
+                y: mouseY - activeImage.y
+            };
+            redrawCanvas();
+            return;
+        }
+
         updateCursor(mouseX, mouseY, activeImage);
 
         if (activeImage.isResizing && resizeHandle) {
@@ -279,8 +332,17 @@ function setupMouseHandlers() {
 
     mainCanvas.addEventListener('mouseup', () => {
         if (activeImageIndex !== -1) {
-            loadedImages[activeImageIndex].isDragging = false;
-            loadedImages[activeImageIndex].isResizing = false;
+            const activeImage = loadedImages[activeImageIndex];
+            if (activeImage.isCropping && activeImage.cropStart) {
+                const cropRect = activeImage.getCropRect();
+                if (cropRect.width < 10 || cropRect.height < 10) {
+                    activeImage.cropStart = null;
+                    activeImage.cropEnd = null;
+                }
+                redrawCanvas();
+            }
+            activeImage.isDragging = false;
+            activeImage.isResizing = false;
             resizeHandle = null;
         }
     });
@@ -310,7 +372,6 @@ function updateCursor(x, y, image) {
     const handles = image.getHandles();
     let cursor = 'default';
 
-    // Check handles first
     for (const handle of Object.values(handles)) {
         if (isPointInHandle(x, y, handle)) {
             cursor = handle.cursor;
@@ -318,7 +379,6 @@ function updateCursor(x, y, image) {
         }
     }
 
-    // Check if over image
     if (cursor === 'default' && isPointInImage(x, y, image)) {
         cursor = 'move';
     }
@@ -329,19 +389,14 @@ function updateCursor(x, y, image) {
 function removeImage(index) {
     if (index < 0 || index >= loadedImages.length) return;
 
-    // Remove the image
     loadedImages.splice(index, 1);
 
-    // Update active index
     if (activeImageIndex === index) {
-        // If we removed the active image, select the last image or -1 if none left
         activeImageIndex = loadedImages.length > 0 ? loadedImages.length - 1 : -1;
     } else if (activeImageIndex > index) {
-        // If we removed an image before the active one, decrement the active index
         activeImageIndex--;
     }
 
-    // Update the display
     updateImageList();
     redrawCanvas();
 }
@@ -354,7 +409,6 @@ function updateImageList() {
         const div = document.createElement('div');
         div.className = `image-item ${index === activeImageIndex ? 'active' : ''}`;
 
-        // Create container for image name and remove button
         const nameSpan = document.createElement('span');
         nameSpan.textContent = `Image ${index + 1}: ${item.file.name}`;
         nameSpan.style.flex = '1';
@@ -392,60 +446,122 @@ function drawGuides() {
     const centerX = mainCanvas.width / 2;
     const centerY = mainCanvas.height / 2;
 
-    // Set guide style
     mainCtx.setLineDash([5, 5]);
     mainCtx.lineWidth = 1;
     mainCtx.strokeStyle = 'rgba(102, 102, 102, 0.8)';
 
-    // Draw vertical guide
     mainCtx.beginPath();
     mainCtx.moveTo(centerX, 0);
     mainCtx.lineTo(centerX, mainCanvas.height);
     mainCtx.stroke();
 
-    // Draw horizontal guide
     mainCtx.beginPath();
     mainCtx.moveTo(0, centerY);
     mainCtx.lineTo(mainCanvas.width, centerY);
     mainCtx.stroke();
 
-    // Reset line style
     mainCtx.setLineDash([]);
 }
 
 function redrawCanvas() {
     mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-
-    // Draw guides first (will be underneath images)
     drawGuides();
 
-    // Draw images
     loadedImages.forEach((imageItem, index) => {
-        // Draw image
         mainCtx.drawImage(imageItem.img, imageItem.x, imageItem.y, imageItem.width, imageItem.height);
 
-        // Draw resize handles for active image
         if (index === activeImageIndex) {
             mainCtx.strokeStyle = '#00ff00';
             mainCtx.lineWidth = 2;
             mainCtx.strokeRect(imageItem.x, imageItem.y, imageItem.width, imageItem.height);
 
-            // Draw resize handles
-            const handles = imageItem.getHandles();
-            mainCtx.fillStyle = '#ffffff';
-            mainCtx.strokeStyle = '#00ff00';
+            if (imageItem.isCropping && imageItem.cropStart && imageItem.cropEnd) {
+                const cropRect = imageItem.getCropRect();
 
-            for (const handle of Object.values(handles)) {
-                mainCtx.beginPath();
-                mainCtx.arc(handle.x, handle.y, 4, 0, Math.PI * 2);
-                mainCtx.fill();
-                mainCtx.stroke();
+                // Draw semi-transparent overlay
+                mainCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                mainCtx.fillRect(imageItem.x, imageItem.y, imageItem.width, imageItem.height);
+
+                // Clear crop area
+                mainCtx.clearRect(
+                    imageItem.x + cropRect.x,
+                    imageItem.y + cropRect.y,
+                    cropRect.width,
+                    cropRect.height
+                );
+
+                // Draw crop rectangle
+                mainCtx.strokeStyle = '#ffffff';
+                mainCtx.strokeRect(
+                    imageItem.x + cropRect.x,
+                    imageItem.y + cropRect.y,
+                    cropRect.width,
+                    cropRect.height
+                );
+            }
+
+            if (!imageItem.isCropping) {
+                const handles = imageItem.getHandles();
+                mainCtx.fillStyle = '#ffffff';
+                mainCtx.strokeStyle = '#00ff00';
+
+                for (const handle of Object.values(handles)) {
+                    mainCtx.beginPath();
+                    mainCtx.arc(handle.x, handle.y, 4, 0, Math.PI * 2);
+                    mainCtx.fill();
+                    mainCtx.stroke();
+                }
             }
         }
     });
 
-    // Draw guides again on top
     drawGuides();
+}
+
+function applyCrop() {
+    if (activeImageIndex === -1) return;
+
+    const activeImage = loadedImages[activeImageIndex];
+    if (!activeImage.isCropping || !activeImage.cropStart || !activeImage.cropEnd) return;
+
+    const cropRect = activeImage.getCropRect();
+    if (cropRect.width < 10 || cropRect.height < 10) {
+        alert('Crop area is too small');
+        return;
+    }
+
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+
+    tempCanvas.width = cropRect.width;
+    tempCanvas.height = cropRect.height;
+
+    tempCtx.drawImage(
+        activeImage.img,
+        cropRect.x / activeImage.width * activeImage.img.width,
+        cropRect.y / activeImage.height * activeImage.img.height,
+        cropRect.width / activeImage.width * activeImage.img.width,
+        cropRect.height / activeImage.height * activeImage.img.height,
+        0, 0, cropRect.width, cropRect.height
+    );
+
+    const croppedImage = new Image();
+    croppedImage.src = tempCanvas.toDataURL();
+
+    croppedImage.onload = () => {
+        activeImage.img = croppedImage;
+        activeImage.width = cropRect.width;
+        activeImage.height = cropRect.height;
+
+        activeImage.isCropping = false;
+        activeImage.cropStart = null;
+        activeImage.cropEnd = null;
+
+        document.getElementById('cropButton').textContent = 'Toggle Crop Mode';
+        document.getElementById('applyCropButton').style.display = 'none';
+
+        redrawCanvas();
+    };
 }
 
 function mergeImages() {
@@ -470,6 +586,7 @@ function mergeImages() {
         console.error('Error merging images:', error);
     }
 }
+
 async function downloadMergedImage() {
     const quality = 1;
     const imageData = mainCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height);
